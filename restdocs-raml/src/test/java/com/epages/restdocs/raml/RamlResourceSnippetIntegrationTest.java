@@ -14,10 +14,13 @@ import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.docu
 import static org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.documentationConfiguration;
 import static org.springframework.restdocs.mockmvc.RestDocumentationRequestBuilders.post;
 import static org.springframework.restdocs.payload.PayloadDocumentation.fieldWithPath;
+import static org.springframework.restdocs.snippet.Attributes.key;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.File;
 import java.util.UUID;
+
+import javax.validation.constraints.NotNull;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -30,6 +33,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.hateoas.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.restdocs.JUnitRestDocumentation;
+import org.springframework.restdocs.constraints.ValidatorConstraintResolver;
+import org.springframework.restdocs.payload.FieldDescriptor;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -110,16 +115,12 @@ public class RamlResourceSnippetIntegrationTest implements RamlResourceSnippetTe
 
     private void whenRamlResourceSnippetDocumentedWithoutParameters() throws Exception {
         resultActions
-                .andDo(
-                        document(operationName, ramlResource())
-                );
+                .andDo(document(operationName, ramlResource()));
     }
 
     private void whenRamlResourceSnippetDocumentedWithRequestAndResponseFields() throws Exception {
         resultActions
-                .andDo(
-                        document(operationName, buildFullRamlResourceSnippet())
-                );
+                .andDo(document(operationName, buildFullRamlResourceSnippet()));
     }
 
     protected RamlResourceSnippet buildFullRamlResourceSnippet() {
@@ -134,10 +135,11 @@ public class RamlResourceSnippetIntegrationTest implements RamlResourceSnippetTe
     }
 
     protected FieldDescriptors fieldDescriptors() {
+        final ConstrainedFields fields = new ConstrainedFields(TestDateHolder.class);
         return RamlResourceDocumentation.fields(
-                fieldWithPath("comment").description("the comment").optional(),
-                fieldWithPath("flag").description("the flag"),
-                fieldWithPath("count").description("the count")
+                fields.withPath("comment").description("the comment").optional(),
+                fields.withPath("flag").description("the flag"),
+                fields.withPath("count").description("the count")
         );
     }
 
@@ -190,11 +192,43 @@ public class RamlResourceSnippetIntegrationTest implements RamlResourceSnippetTe
     @RequiredArgsConstructor
     @Getter
     static class TestDateHolder {
+        @NotNull
         private final String comment;
         private final boolean flag;
         private int count;
 
         @Setter
         private String id;
+    }
+
+
+    static class ConstrainedFields {
+        private final ValidatorConstraintResolver validatorConstraintResolver = new ValidatorConstraintResolver();
+
+        private final Class<?> classHoldingConstraints;
+
+        ConstrainedFields(Class<?> classHoldingConstraints) {
+            this.classHoldingConstraints = classHoldingConstraints;
+        }
+
+        /**
+         * Create a field description with constraints for bean property with the same name
+         * @param path json path of the field
+         */
+        public FieldDescriptor withPath(String path) {
+            return fieldWithPath(path).attributes(key("validationConstraints")
+                    .value(this.validatorConstraintResolver.resolveForProperty(path, classHoldingConstraints)));
+        }
+
+        /**
+         *
+         * Create a field description with constraints for bean property with a name differing from the path
+         * @param jsonPath json path of the field
+         * @param beanPropertyName name of the property of the bean that is used to get the field constraint descriptions
+         */
+        public FieldDescriptor withMappedPath(String jsonPath, String beanPropertyName) {
+            return fieldWithPath(jsonPath).attributes(key("validationConstraints")
+                    .value(this.validatorConstraintResolver.resolveForProperty(beanPropertyName, classHoldingConstraints)));
+        }
     }
 }

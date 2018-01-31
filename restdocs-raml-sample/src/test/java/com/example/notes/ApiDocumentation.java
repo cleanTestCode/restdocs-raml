@@ -92,6 +92,7 @@ public class ApiDocumentation {
 				.andExpect(status().isOk())
 				.andDo(document("index", ramlResource()));
 	}
+
 	@Test
 	public void notesListExample() throws Exception {
 		createNote("REST maturity model", "http://martinfowler.com/articles/richardsonMaturityModel.html");

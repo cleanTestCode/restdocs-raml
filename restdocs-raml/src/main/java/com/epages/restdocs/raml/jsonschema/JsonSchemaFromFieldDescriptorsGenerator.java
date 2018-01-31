@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.everit.json.schema.ArraySchema;
 import org.everit.json.schema.BooleanSchema;
@@ -23,6 +24,7 @@ import org.everit.json.schema.Schema;
 import org.everit.json.schema.StringSchema;
 import org.everit.json.schema.internal.JSONPrinter;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.restdocs.constraints.Constraint;
 import org.springframework.restdocs.payload.FieldDescriptor;
 import org.springframework.restdocs.payload.JsonFieldType;
 
@@ -161,42 +163,62 @@ public class JsonSchemaFromFieldDescriptorsGenerator {
     }
 
     private void handleEndOfPath(ObjectSchema.Builder builder, String propertyName, FieldDescriptor fieldDescriptor) {
+
         if (fieldDescriptor.isIgnored()) {
             // We don't need to render anything
-        } else if (fieldDescriptor.getType().equals(JsonFieldType.NULL) || fieldDescriptor.getType().equals(JsonFieldType.VARIES)) {
-            builder.addPropertySchema(propertyName, NullSchema.builder()
-                    .description((String) fieldDescriptor.getDescription())
-                    .build());
-        } else if (fieldDescriptor.getType().equals(JsonFieldType.OBJECT)) {
-            builder.addPropertySchema(propertyName, ObjectSchema.builder()
-                    .description((String) fieldDescriptor.getDescription())
-                    .build());
-        } else if (fieldDescriptor.getType().equals(JsonFieldType.ARRAY)) {
-            builder.addPropertySchema(propertyName, ArraySchema.builder()
-                    .description((String) fieldDescriptor.getDescription())
-                    .build());
-        } else if (fieldDescriptor.getType().equals(JsonFieldType.BOOLEAN)) {
-            builder.addPropertySchema(propertyName, BooleanSchema.builder()
-                    .description((String) fieldDescriptor.getDescription())
-                    .build());
-        } else if (fieldDescriptor.getType().equals(JsonFieldType.NUMBER)) {
-            builder.addPropertySchema(propertyName, NumberSchema.builder()
-                    .description((String) fieldDescriptor.getDescription())
-                    .build());
-        } else if (fieldDescriptor.getType().equals(JsonFieldType.STRING)) {
-            builder.addPropertySchema(propertyName, StringSchema.builder()
-                    .description((String) fieldDescriptor.getDescription())
-                    .build());
         } else {
-            throw new IllegalArgumentException("unknown field type " + fieldDescriptor.getType());
+            if (isRequired(fieldDescriptor)) {
+                builder.addRequiredProperty(propertyName);
+            }
+            if (fieldDescriptor.getType().equals(JsonFieldType.NULL) || fieldDescriptor.getType().equals(JsonFieldType.VARIES)) {
+                builder.addPropertySchema(propertyName, NullSchema.builder()
+                        .description((String) fieldDescriptor.getDescription())
+                        .build());
+            } else if (fieldDescriptor.getType().equals(JsonFieldType.OBJECT)) {
+                builder.addPropertySchema(propertyName, ObjectSchema.builder()
+                        .description((String) fieldDescriptor.getDescription())
+                        .build());
+
+            } else if (fieldDescriptor.getType().equals(JsonFieldType.ARRAY)) {
+                builder.addPropertySchema(propertyName, ArraySchema.builder()
+                        .description((String) fieldDescriptor.getDescription())
+                        .build());
+            } else if (fieldDescriptor.getType().equals(JsonFieldType.BOOLEAN)) {
+                builder.addPropertySchema(propertyName, BooleanSchema.builder()
+                        .description((String) fieldDescriptor.getDescription())
+                        .build());
+            } else if (fieldDescriptor.getType().equals(JsonFieldType.NUMBER)) {
+                builder.addPropertySchema(propertyName, NumberSchema.builder()
+                        .description((String) fieldDescriptor.getDescription())
+                        .build());
+            } else if (fieldDescriptor.getType().equals(JsonFieldType.STRING)) {
+                builder.addPropertySchema(propertyName, StringSchema.builder()
+                        .description((String) fieldDescriptor.getDescription())
+                        .build());
+            } else {
+                throw new IllegalArgumentException("unknown field type " + fieldDescriptor.getType());
+            }
         }
+    }
+
+    private boolean isRequired(FieldDescriptor fieldDescriptor) {
+        return findConstraints(fieldDescriptor).stream()
+                .anyMatch(constraint -> constraint.getName().equals("javax.validation.constraints.NotNull"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Constraint> findConstraints(FieldDescriptor fieldDescriptor) {
+        return fieldDescriptor.getAttributes().values().stream()
+                .filter(value -> value instanceof List)
+                .map(value -> (List) value)
+                .filter(list -> !list.isEmpty() && list.get(0) instanceof Constraint)
+                .flatMap(list -> (Stream<Constraint>) list.stream())
+                .collect(toList());
     }
 
     static class MultipleNonEqualFieldDescriptors extends RuntimeException {
-        public MultipleNonEqualFieldDescriptors(String path) {
+        MultipleNonEqualFieldDescriptors(String path) {
             super(String.format("Found multiple FieldDescriptors for '%s' with different values", path));
         }
     }
-
-
 }
